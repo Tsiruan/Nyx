@@ -1,7 +1,7 @@
 #include "Nyx.h"
 
 static void task_from_client(int eventfd) {
-	char buffer[BUFFER_SIZE];
+	packet_elem_t buffer[BUFFER_SIZE];
 	int readbyte;
 	readbyte = read(eventfd, buffer, sizeof(buffer));
 
@@ -10,22 +10,23 @@ static void task_from_client(int eventfd) {
 		printf("client disconnected!\n");
 		Nyx_client_close(eventfd);
 	} else {
-		char send_signal_cmd;
-		//printf("\n\n\nmsg_rcv: [state/cmd] %d / %d\n", (int)buffer[0], (int)buffer[1]);	// debug
+		printf("msg_recv: [ %s / %s ]\n", DECODE_STATE(buffer[0]), DECODE_CMD(buffer[1]));	// debug
 
-		Nyx_state_sync_check(eventfd, buffer[0]);
-		Nyx_state_forward(eventfd, buffer[1]);
-		send_signal_cmd = Nyx_state_exec(eventfd, &buffer[2]);
-		Nyx_state_forward(eventfd, send_signal_cmd);
+		cmd_t sent_cmd;
+
+		Nyx_state_sync_check(eventfd, protocol_msg_extract_state(buffer));
+		Nyx_state_forward(eventfd, protocol_msg_extract_cmd(buffer));
+		sent_cmd = Nyx_state_exec(eventfd, protocol_msg_extract_content(buffer));
+		Nyx_state_forward(eventfd, sent_cmd);
 		//printf("%s\n", buffer);
 	}
 }
 
 void cmd_admin() {
-	char buffer[BUFFER_SIZE];
-	scanf("%s", buffer);
+	char buffer_stdin[BUFFER_SIZE];
+	scanf("%s", buffer_stdin);
 
-	if (strcmp(buffer, "shutdown") == 0 || strcmp(buffer, "sd") == 0) {
+	if (strcmp(buffer_stdin, "shutdown") == 0 || strcmp(buffer_stdin, "sd") == 0) {
 		Nyx_server_cleanup();
 		Nyx_close();
 		exit(0);

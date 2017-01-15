@@ -1,23 +1,14 @@
 #include "Xenia.h"
 
 static int 	Nyxfd;
-static char Xenia_state;
+static state_t Xenia_state;
 
-static void Xenia_stdin_scanf(char *buffer);
-static void Xenia_readfds_init(fd_set *readfds);
-static char Xenia_state_exec_session_login(char *message);
-static char Xenia_state_exec_in_console_session(char *message);
-static void Xenia_msg_send(char signal_cmd, char *message);
-static void Xenia_exec_chat(char *chat_title);
-
-void Xenia_init();
-void Xenia_connect();
-void Xenia_close();
-void Xenia_read(char *buffer, int size);
-int  Xenia_in_login_session();						// Never used outside by now
-void Xenia_state_sync_check(char signal_state);
-void Xenia_state_forward(char signal_cmd);
-char Xenia_state_exec(char *message);
+static void  Xenia_stdin_scanf(char *buffer);
+static void  Xenia_readfds_init(fd_set *readfds);
+static cmd_t Xenia_state_exec_session_login(msg_t message);
+static cmd_t Xenia_state_exec_in_console_session(msg_t message);
+static void  Xenia_msg_send(cmd_t signal_cmd, msg_t message);
+static void  Xenia_exec_chat(char *chat_title);
 
 
 
@@ -51,7 +42,7 @@ void Xenia_close() {
 	exit(0);
 }
 
-void Xenia_read(char *buffer, int size) {
+void Xenia_read(packet_elem_t *buffer, int size) {
 	/*int readbyte;*/
 	int readbyte = read(Nyxfd, buffer, size);
 	//printf("msg_rcv: [state/cmd] %d / %d\n", (int)buffer[0], (int)buffer[1]);	// debug
@@ -59,7 +50,11 @@ void Xenia_read(char *buffer, int size) {
 	if (readbyte == 0) {	// server closed
 		printf("server closed!\n");
 		Xenia_close();
+		exit(0);
 	}
+
+	printf("msg_recv: [ %s / %s ]\n", DECODE_STATE(buffer[0]), DECODE_CMD(buffer[1]));	// debug
+
 }
 
 int Xenia_in_login_session() {
@@ -88,20 +83,20 @@ static void Xenia_readfds_init(fd_set *readfds) {
 
 
 
-void Xenia_state_sync_check(char signal_state) {
+void Xenia_state_sync_check(state_t signal_state) {
 	if (signal_state != Xenia_state) {
-		printf("Xenia:		%d\n", (int)Xenia_state);
-		printf("sig_state:	%d\n", (int)signal_state);
+		printf("Xenia_state: %s\n", DECODE_STATE(Xenia_state));
+		printf("sig_state:	 %s\n", DECODE_STATE(signal_state));
 		perror("Xenia_state_sync_check() error");
 		exit(1);
 	}
 }
 
-void Xenia_state_forward(char signal_cmd) {
+void Xenia_state_forward(cmd_t signal_cmd) {
 	protocol_state_forward(&Xenia_state, signal_cmd);
 }
 
-char Xenia_state_exec(char *message) {
+cmd_t Xenia_state_exec(msg_t message) {						// TEMP!!
 	if (protocol_state_in_login_session(Xenia_state)) {
 		return Xenia_state_exec_session_login(message);
 	} else if (protocol_state_in_console_session(Xenia_state)) {
@@ -112,13 +107,13 @@ char Xenia_state_exec(char *message) {
 	exit(1);
 }
 
-static void Xenia_msg_send(char signal_cmd, char *message) {
+static void Xenia_msg_send(cmd_t signal_cmd, msg_t message) {
 	protocol_msg_send(Nyxfd, Xenia_state, signal_cmd, message);
 }
 
 /* return cmd sent out */
-static char Xenia_state_exec_session_login(char *message) {
-	char buffer[LENGTH_MAX];
+static cmd_t Xenia_state_exec_session_login(msg_t message) {
+	packet_elem_t buffer[LENGTH_MAX];
 
 	switch (Xenia_state) {
 		case STATE_LOGIN_0 :
@@ -202,8 +197,7 @@ static void Xenia_exec_chat(char *chat_title) {
 	printf("%s\n", buffer);*/
 }
 
-static char Xenia_state_exec_in_console_session(char *message) {
-	char buffer[BUFFER_SIZE];
+static cmd_t Xenia_state_exec_in_console_session(msg_t message) {
 	printf("You have successfully logged in!\n");
 
 	fd_set readfds;
@@ -211,11 +205,12 @@ static char Xenia_state_exec_in_console_session(char *message) {
 		Xenia_readfds_init(&readfds);
 
 		if (Xenia_select(&readfds) == Nyxfd) {
-			Xenia_read(buffer, sizeof(buffer));
-			char cmd = buffer[1];
-			char *ptr = buffer + 2;
+			packet_elem_t buffer_network[BUFFER_SIZE];
 
-			switch(cmd) {
+			Xenia_read(buffer_network, sizeof(buffer_network));
+			msg_t ptr = protocol_msg_extract_content(buffer_network);
+
+			switch(protocol_msg_extract_cmd(buffer_network)) {
 				case CMD_USER_RETURN_LIST:
 				//case CMD_USER_UPDATE_ONLINE:
 				case CMD_CHAT_RETURN_LIST:
@@ -232,34 +227,36 @@ static char Xenia_state_exec_in_console_session(char *message) {
 
 				case CMD_CHAT_RETURN_DIALOG:
 				case CMD_CHAT_UPDATE_DIALOG:
-				printf("%s\n", buffer+2);
+				printf("%s\n", protocol_msg_extract_content(buffer_network));
 				break;
 			}
 
 		} else {
 											// msg from user
+			char buffer_stdin[BUFFER_SIZE];
+
 			int flag_in_chat = 0;
-			Xenia_stdin_scanf(buffer);
-			if (strcmp(buffer, "logout") == 0) {		// logout
+			Xenia_stdin_scanf(buffer_stdin);
+			if (strcmp(buffer_stdin, "logout") == 0) {		// logout
 				Xenia_msg_send(CMD_CHANGE_STATE_LOGOUT, NULL);
 				printf("Logged out!\n");
 				return CMD_CHANGE_STATE_LOGOUT;				// <---- gate out of console state
 
-			} else if (strcmp(buffer, "l") == 0 && !flag_in_chat) {		// list all users
+			} else if (strcmp(buffer_stdin, "l") == 0 && !flag_in_chat) {		// list all users
 				Xenia_msg_send(CMD_USER_LIST_ALL, NULL);
-			} else if (strcmp(buffer, "lo") == 0 && !flag_in_chat) {		// list all users online
+			} else if (strcmp(buffer_stdin, "lo") == 0 && !flag_in_chat) {		// list all users online
 				Xenia_msg_send(CMD_USER_LIST_ONLINE, NULL);
-			} else if (strcmp(buffer, "lc") == 0 && !flag_in_chat) {		// list all chats
+			} else if (strcmp(buffer_stdin, "lc") == 0 && !flag_in_chat) {		// list all chats
 				Xenia_msg_send(CMD_CHAT_LIST_ALL, NULL);
-			} else if (strncmp(buffer, "#chat", 6) == 0) {		// start a chat
+			} else if (strncmp(buffer_stdin, "#chat", 6) == 0) {		// start a chat
 				flag_in_chat = 1;
-				Xenia_exec_chat(buffer + 6);
-			} else if (strcmp(buffer, "#leave") == 0) {
+				Xenia_exec_chat(buffer_stdin + 6);
+			} else if (strcmp(buffer_stdin, "#leave") == 0) {
 				flag_in_chat = 0;
 			} else {
 
 				if (flag_in_chat) {
-					Xenia_msg_send(CMD_CHAT_SENDMSG, buffer);
+					Xenia_msg_send(CMD_CHAT_SENDMSG, buffer_stdin);
 				} else {
 					printf("unkown command!\n");
 				}

@@ -10,4 +10,4 @@ void Xenia_read(char *buffer, int size);
 int  Xenia_in_login_session();
 void Xenia_state_sync_check(char signal_state);
 void Xenia_state_forward(char signal_cmd);
-char Xenia_state_exec(char *message);
+cmd_t Xenia_state_exec(packet_t message);

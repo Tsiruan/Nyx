@@ -1,44 +1,33 @@
 #include "protocol.h"
 
+static int protocol_state_trans_pack(state_t nextstate, cmd_t trans_signal_cmd);
+static void protocol_state_TransTable_fill_array(char transTableIndex, int count, ...);
+
+
 #define PACK(signal, state) protocol_state_trans_pack(state, signal)
 
-static short TransTable[ STATELIST_MAX_STATES ][ STATELIST_LENGTH ];
+static transition_t TransTable[ STATELIST_MAX_STATES ][ STATELIST_LENGTH ];
+
+/*
+ *  The packet sends between client and server has a header:
+ *  ------------------------------------------------------------------------
+ *  |        state         |          cmd         |       messages.....
+ *  ------------------------------------------------------------------------
+ *  |<--- 8 bits, char --->|<--- 8 bits, char --->|
+ *
+ *
+ *
+ *  The complete information of DFA is stored in the Transition Table, by this format:
+ *   
+ *   | current |     command     |  next   |
+ *   |  state  |  ------------>  |  state  |
+ *
+ *  TransTable[current state][] = {transition 1, transition 2, ...}
+ *  short transition =  (nextState, command)
+ *        ^ 2 byte ^     ^ char ^   ^ char ^
+ */
 
 
-
-static int protocol_state_trans_pack(const char nextstate, const char trans_signal_cmd) {
-	int state = nextstate;
-	int statetrans_pack = (state << 8) + trans_signal_cmd;
-
-	//printf("[state/trans_sig_cmd] %d / %d\n", state, (int)trans_signal_cmd);
-	//printf("state_trans_pack =    %d\n", statetrans_pack);
-
-
-	return statetrans_pack;
-}
-
-static void protocol_state_TransTable_fill_array(char transTableIndex, int count, ...) {
-	va_list args_ptr;
-
-	va_start(args_ptr, count);
-
-	int i;
-	for (i = 0; i < count; i++) {
-		TransTable[(short)transTableIndex][i] = (short)va_arg(args_ptr, int);
-	}
-
-	TransTable[(short)transTableIndex][count] = PACK(CMD_END_OF_CMDLIST, 0);
-
-	va_end(args_ptr);
-}
-
-int protocol_state_in_login_session(int state) {
-	return STATE_LOGIN_MIN <= state && state < STATE_LOGIN_MAX;
-}
-
-int protocol_state_in_console_session(int state) {
-	return STATE_CONSOLE_MIN <= state && state < STATE_CONSOLE_MAX;
-}
 
 void protocol_state_TransTable_init() {
 	protocol_state_TransTable_fill_array(STATE_LOGIN_0, 2, 	PACK(CMD_LOGIN_LOGINPLEASE,		STATE_LOGIN_0),	PACK(CMD_LOGIN_ENTERID,		STATE_LOGIN_1));
@@ -63,41 +52,61 @@ void protocol_state_TransTable_init() {
 															PACK(CMD_FTRANS_REQUEST,		STATE_CONSOLE));
 }
 
-void protocol_state_forward(char *state, const char signal_cmd) {
-	short i;
-	//printf("state = 	 %d\n", *state);
-	//printf("signal_cmd = %d\n", signal_cmd);
-	printf("forwarding [%s < %s] ---> ", DECODE_STATE(*state), DECODE_CMD(signal_cmd));
-	for (i = 0; (char)TransTable[(short)*state][i] != CMD_END_OF_CMDLIST && i < STATELIST_MAX_TRANSITION; i++) {
-		//printf("trans_signal_cmd = %d\n", (char)TransTable[(short)*state][i]);
-		if ((char)TransTable[(short)*state][i] == signal_cmd) {
-			*state = (char)(TransTable[(short)*state][i] >> 8);
-			printf("%s\n", DECODE_STATE(*state));
-			return;
+static int protocol_state_trans_pack(state_t nextstate, cmd_t trans_signal_cmd) {
+	int state = nextstate;
+	int statetrans_pack = (state << 8) + trans_signal_cmd;
+
+	return statetrans_pack;
+}
+
+static void protocol_state_TransTable_fill_array(state_t currentState, int count, ...) {
+	va_list args_ptr;
+	va_start(args_ptr, count);
+
+	int i;
+	for (i = 0; i < count; i++) {
+		TransTable[(int)currentState][i] = (transition_t)va_arg(args_ptr, int);
+	}
+
+	TransTable[(int)currentState][count] = PACK(CMD_END_OF_CMDLIST, 0);
+	va_end(args_ptr);
+}
+
+state_t protocol_state_TransTable_lookup(const state_t currentState, const cmd_t rcvcmd) {
+	int i;
+
+	for (i = 0; (cmd_t)TransTable[(int)currentState][i] != CMD_END_OF_CMDLIST && i < STATELIST_MAX_TRANSITION; i++) {
+		if ((cmd_t)TransTable[(int)currentState][i] == rcvcmd) {
+			//printf("%s\n", DECODE_STATE(currentState));
+			return (state_t)(TransTable[(int)currentState][i] >> 8);
 		}
 	}
-	//printf("state:		%d\n", *state);
-	//printf("sig_cmd: 	%d\n", signal_cmd);
 
-	perror("protocol_state_forward() error:");
-	printf("\non %s\nrcv %s\n", DECODE_STATE(*state), DECODE_CMD 	(signal_cmd));
+	perror("transTable_lookup() error");
+	printf("\non %s\nrcv %s\n", DECODE_STATE(currentState), DECODE_CMD(rcvcmd));
 	exit(1);
 }
 
-/*
-void shift_msg(char *message) {
-	short *ptr;
-	ptr = (short *)message;
-	int i;
-	short temp = 0;
-	for (i = 1; i < sizeof(message)/2; i++) {
-		ptr[i] = temp;
-		ptr[i] = ptr[i-1];
-	}
-}*/
+void protocol_state_forward(state_t *state, const cmd_t signal_cmd) {
+	printf("forwarding [%s > %s] ---> ", DECODE_STATE(*state), DECODE_CMD(signal_cmd));
 
-void protocol_msg_send(int fd, char signal_state, char signal_cmd, char *message) {
-	char buffer[BUFFER_SIZE] = {signal_state, signal_cmd, 0};		
+	*state = protocol_state_TransTable_lookup(*state, signal_cmd);
+
+	printf("[%s]\n", DECODE_STATE(*state));
+}
+
+/* These two function are quite bad approaches */
+int protocol_state_in_login_session(state_t state) {
+	return STATE_LOGIN_MIN <= state && state < STATE_LOGIN_MAX;
+}
+
+int protocol_state_in_console_session(state_t state) {
+	return STATE_CONSOLE_MIN <= state && state < STATE_CONSOLE_MAX;
+}
+
+
+void protocol_msg_send(int fd, state_t signal_state, cmd_t signal_cmd, msg_t message) {
+	packet_elem_t buffer[BUFFER_SIZE] = {signal_state, signal_cmd};		
 	if (message != NULL) {
 		memmove((buffer + 2), message, sizeof(buffer)-2);
 	}
@@ -106,7 +115,17 @@ void protocol_msg_send(int fd, char signal_state, char signal_cmd, char *message
 	printf("msg_send: [ %s / %s ]\n", DECODE_STATE(buffer[0]), DECODE_CMD(buffer[1]));	// debug
 }
 
-void protocol_msg_extract() {;}
+state_t protocol_msg_extract_state(packet_t packet) {
+	return packet[0];
+}
+
+cmd_t protocol_msg_extract_cmd(packet_t packet) {
+	return packet[1];
+}
+
+msg_t protocol_msg_extract_content(packet_t packet) {
+	return packet + 2;
+}
 
 const char *protocol_decode_state(char state_num) {
 	switch(state_num) {

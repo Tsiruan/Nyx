@@ -10,6 +10,7 @@
 #define LENGTH_PASS_MAX	15
 #define LENGTH_MAX 		15	// This is temporary
 
+
 //#define SESSION_LOGIN		0x00
 //#define SESSION_CONSOLE		0x01
 
@@ -63,12 +64,10 @@
 #define STATE_LOGIN_6	0x07
 #define STATE_LOGIN_7	0x08
 #define	STATE_LOGIN_MAX	0x09
-int protocol_state_in_login_session(int state);
 
 #define STATE_CONSOLE_MIN	0x09
 #define STATE_CONSOLE		0x09
 #define STATE_CONSOLE_MAX	0x0A
-int protocol_state_in_console_session(int state);
 
 #define STATELIST_MAX_STATES		10
 #define STATELIST_MAX_TRANSITION	16
@@ -80,15 +79,32 @@ int protocol_state_in_console_session(int state);
 #define NYX_DATABASE_PASS_CONFIRM		1
 
 
-
-void protocol_state_TransTable_init();
-void protocol_state_forward(char *state, const char signal_cmd);
-
 #define DECODE_STATE(state) protocol_decode_state(state)
-#define DECODE_CMD(cmd) protocol_decode_cmd(cmd)
-const char *protocol_decode_state(char state_num);
-const char *protocol_decode_cmd(char cmd_num);
+#define DECODE_CMD(cmd) 	protocol_decode_cmd(cmd)
+#define EXTRACT_STATE(msg) 	protocol_msg_extract_state(msg)
+#define EXTRACT_CMD(msg) 	protocol_msg_extract_cmd(msg)
+#define EXTRACT_CONTENT(msg) protocol_msg_extract_content(msg)
 
-void protocol_msg_send(int fd, char signal_state, char signal_cmd, char *message);
+typedef char 			packet_elem_t;
+typedef packet_elem_t* 	packet_t;
+typedef short 			transition_t;	/* big enough to contain state & cmd */
+typedef char 			state_t;
+typedef char 			cmd_t;
+typedef char*		 	msg_t;
+
+
+int  protocol_state_in_login_session(state_t state);
+int  protocol_state_in_console_session(state_t state);
+void protocol_state_TransTable_init();
+void protocol_state_forward(state_t *state, const cmd_t signal_cmd);
+
+const char *protocol_decode_state(state_t state_num);
+const char *protocol_decode_cmd(cmd_t cmd_num);
+
+void 	protocol_msg_send(int fd, state_t signal_state, cmd_t signal_cmd, msg_t message);
+state_t protocol_msg_extract_state(packet_t packet);
+cmd_t 	protocol_msg_extract_cmd(packet_t packet);
+msg_t 	protocol_msg_extract_content(packet_t packet);
+
 //void protocol_msg_get_sigstate();
 //void protocol_msg_get_sigcmd();

@@ -8,7 +8,7 @@ struct OnlineAccount {
 	int fd;
 	char id[LENGTH_ID_MAX+1];
 	//char session;
-	char state;
+	state_t state;
 	struct sockaddr_in sockaddr;
 };
 
@@ -104,7 +104,7 @@ void Nyx_fdset_addlistenfd(fd_set *fds) {
 
 
 
-static void Nyx_onlineAccount_set(int onlineTable_index, int newfd, char *id,/* char session,*/ char state, struct sockaddr_in *client_in) {
+static void Nyx_onlineAccount_set(int onlineTable_index, int newfd, char *id, state_t state, struct sockaddr_in *client_in) {
 	struct OnlineAccount *onlineAccount = &onlineTable.onlineAccounts[onlineTable_index];
 
 	onlineAccount->fd = newfd;
@@ -189,7 +189,7 @@ static struct OnlineAccount * Nyx_onlineTable_getbyfd(int fd) {
 
 
 
-void Nyx_state_sync_check(int clientfd, char signal_state) {
+void Nyx_state_sync_check(int clientfd, state_t signal_state) {
 	const struct OnlineAccount* onlineAccount = Nyx_onlineTable_getbyfd(clientfd);
 	if (onlineAccount->state != signal_state) {
 		printf("Nyx_state_sync_check() error \nfd = %d\n", clientfd);
@@ -197,12 +197,12 @@ void Nyx_state_sync_check(int clientfd, char signal_state) {
 	}
 }
 
-void Nyx_state_forward(int clientfd, char signal_cmd) {
+void Nyx_state_forward(int clientfd, cmd_t signal_cmd) {
 	struct OnlineAccount* onlineAccount = Nyx_onlineTable_getbyfd(clientfd);
 	protocol_state_forward(&onlineAccount->state, signal_cmd);
 }
 
-static char Nyx_state_exec_session_login(char current_state, int clientfd, char *message, struct OnlineAccount* onlineAccount) {
+static cmd_t Nyx_state_exec_session_login(state_t current_state, int clientfd, msg_t message, struct OnlineAccount* onlineAccount) {
 	switch (current_state) {
 
 		case STATE_LOGIN_0:
@@ -248,8 +248,8 @@ static char Nyx_state_exec_session_login(char current_state, int clientfd, char 
 	exit(1);
 }
 
-static char Nyx_state_exec_session_console_changestate(char current_state, int clientfd, char *message) {
-	char command = *(message -1);
+static cmd_t Nyx_state_exec_session_console_changestate(state_t current_state, int clientfd, msg_t message) {
+	cmd_t command = *(message -1);
 	switch (command) {
 		case CMD_CHANGE_STATE_LOGOUT:
 		printf("client logged out!\n");
@@ -263,7 +263,7 @@ static char Nyx_state_exec_session_console_changestate(char current_state, int c
 	exit(1);
 }
 
-static char Nyx_state_exec_session_console_chat(int clientfd, char *message) {
+static cmd_t Nyx_state_exec_session_console_chat(int clientfd, msg_t message) {
 	char buffer[BUFFER_SIZE];
 	struct OnlineAccount * requestAccount = Nyx_onlineTable_getbyfd(clientfd);
 
@@ -290,7 +290,7 @@ static char Nyx_state_exec_session_console_chat(int clientfd, char *message) {
 	exit(1);
 }
 
-static char Nyx_state_exec_session_console_user(int clientfd, char *message) {
+static cmd_t Nyx_state_exec_session_console_user(int clientfd, msg_t message) {
 	char userlist[BUFFER_SIZE];
 
 	switch(*(message - 1)) {
@@ -311,8 +311,8 @@ static char Nyx_state_exec_session_console_user(int clientfd, char *message) {
 	exit(1);
 }
 
-static char Nyx_state_exec_session_console(char current_state, int clientfd, char *message) {
-	char command = *(message - 1);
+static cmd_t Nyx_state_exec_session_console(state_t current_state, int clientfd, msg_t message) {
+	cmd_t command = *(message - 1);
 	switch(command & CMD_MASK_SESSION) {	 
 		case CMD_MASK_CHANGE_STATE:
 		return Nyx_state_exec_session_console_changestate(current_state, clientfd, message);
@@ -331,10 +331,9 @@ static char Nyx_state_exec_session_console(char current_state, int clientfd, cha
 	return 0;
 }
 
-// return command sent to client
-char Nyx_state_exec(int clientfd, char *message) {
+cmd_t Nyx_state_exec(int clientfd, msg_t message) {
 	struct OnlineAccount* onlineAccount = Nyx_onlineTable_getbyfd(clientfd);
-	char current_state = onlineAccount->state;
+	state_t current_state = onlineAccount->state;
 
 	//printf("state num: %d\n", current_state);
 	if (protocol_state_in_login_session(current_state)) {
@@ -507,7 +506,7 @@ static void Nyx_database_account_new(char *id, char *password) {
 	fwrite(buffer, sizeof(char), LENGTH_ID_MAX + LENGTH_PASS_MAX + 2, account_cfg_fp);
 	fclose(account_cfg_fp);
 
-	/*
+	
 	char cfg_path[50] = {};
 	strcat(cfg_path, NYX_DATABASE_PATH_CFG_FILES);
 	strcat(cfg_path, id);
@@ -518,5 +517,5 @@ static void Nyx_database_account_new(char *id, char *password) {
 		printf("errno: %d\n", errno);
 		exit(1);
 	}
-	close(fd);*/
+	close(fd);
 }
