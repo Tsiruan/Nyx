@@ -96,7 +96,7 @@ void Xenia_state_forward(cmd_t signal_cmd) {
 	protocol_state_forward(&Xenia_state, signal_cmd);
 }
 
-cmd_t Xenia_state_exec(msg_t message) {						// TEMP!!
+cmd_t Xenia_state_exec(msg_t message) {
 	if (protocol_state_in_login_session(Xenia_state)) {
 		return Xenia_state_exec_session_login(message);
 	} else if (protocol_state_in_console_session(Xenia_state)) {

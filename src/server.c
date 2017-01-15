@@ -16,12 +16,13 @@ static void task_from_client(int eventfd) {
 
 		Nyx_state_sync_check(eventfd, protocol_msg_extract_state(buffer));
 		Nyx_state_forward(eventfd, protocol_msg_extract_cmd(buffer));
-		sent_cmd = Nyx_state_exec(eventfd, protocol_msg_extract_content(buffer));
+		sent_cmd = Nyx_state_exec(eventfd, protocol_msg_extract_cmd(buffer), protocol_msg_extract_content(buffer));
 		Nyx_state_forward(eventfd, sent_cmd);
 		//printf("%s\n", buffer);
 	}
 }
 
+/* This is dirty, merge this into automata */
 void cmd_admin() {
 	char buffer_stdin[BUFFER_SIZE];
 	scanf("%s", buffer_stdin);

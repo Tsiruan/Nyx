@@ -18,6 +18,6 @@ void Nyx_client_close(int clientfd);
 void Nyx_fdset_addlistenfd(fd_set *fds);
 void Nyx_onlineTable_fill_fdset(fd_set *fds);
 
-void Nyx_state_sync_check(int clientfd, char signal_state);
-void Nyx_state_forward(int clientfd, char signal_cmd);
-char Nyx_state_exec(int clientfd, char *message);
+void Nyx_state_sync_check(int clientfd, state_t signal_state);
+void Nyx_state_forward(int clientfd, cmd_t signal_cmd);
+cmd_t Nyx_state_exec(int clientfd, cmd_t rcvcmd , msg_t message);

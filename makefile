@@ -11,8 +11,7 @@ SRCPATH = ./src
 INCPATH = ./src/include
 INCLUDE = -I $(INCPATH)
 OPTIONS = $(DEFINE) $(INCLUDE) $(CFLAGS)
-#GENINC = $(INCPATH)/networking.h $(INCPATH)protocol.h
-GENOBJ = $(BINPATH)/networking.o $(BINPATH)/protocol.o #$(BINPATH)/filetransfer.o
+GENOBJ = networking.o protocol.o
 
 
 all: init mkdirs buildNyx buildXenia
@@ -21,31 +20,34 @@ mkdirs:
 	mkdir -p bin
 	mkdir -p bin/cfg
 
-buildNyx: $(BINPATH)/server.o $(BINPATH)/Nyx.o $(GENOBJ)
-	$(CC) $(OPTIONS) -o $(BINPATH)/Nyx $^
+# build server and client
+buildNyx: server.o Nyx.o $(GENOBJ)
+	$(CC) $(OPTIONS) -o $(BINPATH)/Nyx $(patsubst %.o, $(BINPATH)/%.o, $^)
 
-buildXenia: $(BINPATH)/client.o $(BINPATH)/Xenia.o $(GENOBJ)
-	$(CC) $(OPTIONS) -o $(BINPATH)/Xenia $^
+buildXenia: client.o Xenia.o $(GENOBJ)
+	$(CC) $(OPTIONS) -o $(BINPATH)/Xenia $(patsubst %.o, $(BINPATH)/%.o, $^)
 
-$(BINPATH)/%.o: $(SRCPATH)/%.c #$(INCPATH)/%.h $(GENINC)
-	$(CC) $(OPTIONS) -c $< -o $@
+# compile all object files
+%.o: $(SRCPATH)/%.c
+	$(CC) $(OPTIONS) -c $< -o $(BINPATH)/$@
 
-clear:
-	rm -f bin/*
-
+# delete all binaries
 init:
 	rm -f -r bin
 
+# run server or client
 server srv Nyx nyx:
 	./bin/Nyx
-
-desrv:
-	gdb ./bin/Nyx
 
 client cli Xenia xen:
 	./bin/Xenia
 
-decli:
+
+
+ds:
+	gdb ./bin/Nyx
+
+dc:
 	gdb ./bin/Xenia
 
 test:

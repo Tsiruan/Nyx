@@ -21,20 +21,20 @@ struct OnlineTable {
 static int Nyxfd;
 static struct OnlineTable onlineTable;
 static struct OnlineAccount * Nyx_onlineTable_getbyfd(int fd);
-static void Nyx_onlineTable_init();
-static void Nyx_onlineAccount_set(int onlineTable_index, int newfd, char *id,/* char session,*/ char state, struct sockaddr_in *client_in);
-static void Nyx_onlineTable_push(int newfd, struct sockaddr_in *client_in);
-static void Nyx_onlineTable_pop(int popfd);
-static char Nyx_state_exec_session_login(char current_state, int clientfd, char *message, struct OnlineAccount* onlineAccount);
-static char Nyx_state_exec_session_console(char current_state, int clientfd, char *message);
-static void Nyx_database_init();
-static int  Nyx_database_account_lookupID(char *id);
-static int  Nyx_database_passwork_check(char *id, char *password);
-static void Nyx_database_userlist_get(char *userlist);
-static void Nyx_database_chat_getbyuser(char *chatlist, char *id);
-static void Nyx_database_chat_dialog_get(char *dialog, char *id, char *chat_title);
-static void Nyx_database_chat_message_append(char *id, char *chat_title, char *message);
-static void Nyx_database_account_new(char *id, char *password);
+static void  Nyx_onlineTable_init();
+static void  Nyx_onlineAccount_set(int onlineTable_index, int newfd, char *id,/* char session,*/ char state, struct sockaddr_in *client_in);
+static void  Nyx_onlineTable_push(int newfd, struct sockaddr_in *client_in);
+static void  Nyx_onlineTable_pop(int popfd);
+static cmd_t Nyx_state_exec_session_login(state_t current_state, int clientfd, msg_t message, struct OnlineAccount* onlineAccount);
+static cmd_t Nyx_state_exec_session_console(state_t current_state, cmd_t rcvcmd, int clientfd, msg_t message);
+static void  Nyx_database_init();
+static int   Nyx_database_account_lookupID(char *id);
+static int   Nyx_database_passwork_check(char *id, char *password);
+static void  Nyx_database_userlist_get(char *userlist);
+static void  Nyx_database_chat_getbyuser(char *chatlist, char *id);
+static void  Nyx_database_chat_dialog_get(char *dialog, char *id, char *chat_title);
+static void  Nyx_database_chat_message_append(char *id, char *chat_title, char *message);
+static void  Nyx_database_account_new(char *id, char *password);
 
 
 
@@ -248,9 +248,8 @@ static cmd_t Nyx_state_exec_session_login(state_t current_state, int clientfd, m
 	exit(1);
 }
 
-static cmd_t Nyx_state_exec_session_console_changestate(state_t current_state, int clientfd, msg_t message) {
-	cmd_t command = *(message -1);
-	switch (command) {
+static cmd_t Nyx_state_exec_session_console_changestate(state_t current_state, cmd_t rcvcmd, int clientfd, msg_t message) {
+	switch (rcvcmd) {
 		case CMD_CHANGE_STATE_LOGOUT:
 		printf("client logged out!\n");
 		Nyx_onlineTable_wipe(clientfd);
@@ -263,11 +262,11 @@ static cmd_t Nyx_state_exec_session_console_changestate(state_t current_state, i
 	exit(1);
 }
 
-static cmd_t Nyx_state_exec_session_console_chat(int clientfd, msg_t message) {
+static cmd_t Nyx_state_exec_session_console_chat(int clientfd, cmd_t rcvcmd, msg_t message) {
 	char buffer[BUFFER_SIZE];
 	struct OnlineAccount * requestAccount = Nyx_onlineTable_getbyfd(clientfd);
 
-	switch(*(message - 1)) {
+	switch(rcvcmd) {
 		case CMD_CHAT_LIST_ALL:
 		Nyx_database_chat_getbyuser(buffer, requestAccount->id);
 		protocol_msg_send(clientfd, STATE_LOGIN_0, CMD_CHAT_RETURN_LIST, buffer);
@@ -290,10 +289,10 @@ static cmd_t Nyx_state_exec_session_console_chat(int clientfd, msg_t message) {
 	exit(1);
 }
 
-static cmd_t Nyx_state_exec_session_console_user(int clientfd, msg_t message) {
+static cmd_t Nyx_state_exec_session_console_user(int clientfd, cmd_t rcvcmd, msg_t message) {
 	char userlist[BUFFER_SIZE];
 
-	switch(*(message - 1)) {
+	switch(rcvcmd) {
 		case CMD_USER_LIST_ALL:
 		Nyx_database_userlist_get(userlist);
 		protocol_msg_send(clientfd, STATE_CONSOLE, CMD_USER_RETURN_LIST, userlist);
@@ -311,19 +310,18 @@ static cmd_t Nyx_state_exec_session_console_user(int clientfd, msg_t message) {
 	exit(1);
 }
 
-static cmd_t Nyx_state_exec_session_console(state_t current_state, int clientfd, msg_t message) {
-	cmd_t command = *(message - 1);
-	switch(command & CMD_MASK_SESSION) {	 
+static cmd_t Nyx_state_exec_session_console(state_t current_state, cmd_t rcvcmd, int clientfd, msg_t message) {
+	switch(rcvcmd & CMD_MASK_SESSION) {	 
 		case CMD_MASK_CHANGE_STATE:
-		return Nyx_state_exec_session_console_changestate(current_state, clientfd, message);
+		return Nyx_state_exec_session_console_changestate(current_state, rcvcmd, clientfd, message);
 		break;
 
 		case CMD_MASK_USER:
-		return Nyx_state_exec_session_console_user(clientfd, message);
+		return Nyx_state_exec_session_console_user(clientfd, rcvcmd, message);
 		break;
 
 		case CMD_MASK_CHAT:
-		return Nyx_state_exec_session_console_chat(clientfd, message);
+		return Nyx_state_exec_session_console_chat(clientfd, rcvcmd, message);
 		break;
 	}
 
@@ -331,17 +329,17 @@ static cmd_t Nyx_state_exec_session_console(state_t current_state, int clientfd,
 	return 0;
 }
 
-cmd_t Nyx_state_exec(int clientfd, msg_t message) {
+cmd_t Nyx_state_exec(int clientfd, cmd_t rcvcmd, msg_t message) {
 	struct OnlineAccount* onlineAccount = Nyx_onlineTable_getbyfd(clientfd);
-	state_t current_state = onlineAccount->state;
+	state_t exec_state = onlineAccount->state;
 
-	//printf("state num: %d\n", current_state);
-	if (protocol_state_in_login_session(current_state)) {
+	//printf("state num: %d\n", exec_state);
+	if (protocol_state_in_login_session(exec_state)) {
 		//printf("enter login session\n");
-		return Nyx_state_exec_session_login(current_state, clientfd, message, onlineAccount);
-	} else if (protocol_state_in_console_session(current_state)) {
+		return Nyx_state_exec_session_login(exec_state, clientfd, message, onlineAccount);
+	} else if (protocol_state_in_console_session(exec_state)) {
 		//printf("enter console session\n");
-		return Nyx_state_exec_session_console(current_state, clientfd, message);
+		return Nyx_state_exec_session_console(exec_state, rcvcmd, clientfd, message);
 	}
 
 	perror("Nyx_state_exec() error");
