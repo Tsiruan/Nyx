@@ -4,36 +4,54 @@ else
 DEFINE = -D _LINUX_
 endif
 
-CC = gcc
-CFLAGS = -Wall
 BINPATH = ./bin
 SRCPATH = ./src
+NYXPATH = Nyx
+XENPATH = Xenia
 INCPATH = ./src/include
+
+# put all names of source file here, and it will compile!
+NYXSRC = server.c Nyx.c
+XENSRC = client.c Xenia.c
+GENSRC = networking.c protocol.c
+NYXOBJ = $(patsubst %.c, $(NYXPATH)/%.o, $(NYXSRC))
+XENOBJ = $(patsubst %.c, $(XENPATH)/%.o, $(XENSRC))
+GENOBJ = $(patsubst %.c, %.o, $(GENSRC))
+
+CC = gcc
+CFLAGS = -Wall
 INCLUDE = -I $(INCPATH)
 OPTIONS = $(DEFINE) $(INCLUDE) $(CFLAGS)
-GENOBJ = networking.o protocol.o
 
 
 all: init mkdirs buildNyx buildXenia
+
+# delete all binaries and its' folders
+# .o files doesn't have dependencies on headers, thus recompile everytime for now
+init:
+	rm -f -r bin
 
 mkdirs:
 	mkdir -p bin
 	mkdir -p bin/cfg
 
 # build server and client
-buildNyx: server.o Nyx.o $(GENOBJ)
-	$(CC) $(OPTIONS) -o $(BINPATH)/Nyx $(patsubst %.o, $(BINPATH)/%.o, $^)
+buildNyx: $(NYXOBJ) $(GENOBJ)
+	$(CC) $(OPTIONS) -o $(BINPATH)/Nyx $(patsubst %.o, $(BINPATH)/%.o, $(notdir $^))
 
-buildXenia: client.o Xenia.o $(GENOBJ)
-	$(CC) $(OPTIONS) -o $(BINPATH)/Xenia $(patsubst %.o, $(BINPATH)/%.o, $^)
+buildXenia: $(XENOBJ) $(GENOBJ)
+	$(CC) $(OPTIONS) -o $(BINPATH)/Xenia $(patsubst %.o, $(BINPATH)/%.o, $(notdir $^))
 
 # compile all object files
-%.o: $(SRCPATH)/%.c
-	$(CC) $(OPTIONS) -c $< -o $(BINPATH)/$@
+# not a neat coding, fix it afterwards
+$(NYXPATH)/%.o: $(SRCPATH)/$(NYXPATH)/%.c
+	$(CC) $(OPTIONS) -c $< -o $(BINPATH)/$(notdir $@)
 
-# delete all binaries
-init:
-	rm -f -r bin
+$(XENPATH)/%.o: $(SRCPATH)/$(XENPATH)/%.c
+	$(CC) $(OPTIONS) -c $< -o $(BINPATH)/$(notdir $@)
+
+%.o: $(SRCPATH)/%.c
+	$(CC) $(OPTIONS) -c $< -o $(BINPATH)/$(notdir $@)
 
 # run server or client
 server srv Nyx nyx:
@@ -41,17 +59,3 @@ server srv Nyx nyx:
 
 client cli Xenia xen:
 	./bin/Xenia
-
-
-
-ds:
-	gdb ./bin/Nyx
-
-dc:
-	gdb ./bin/Xenia
-
-test:
-	gcc test.c -o test
-
-clt:
-	rm test test.c
