@@ -11,7 +11,7 @@ XENPATH = Xenia
 INCPATH = ./src/include
 
 # put all names of source file here, and it will compile!
-NYXSRC = server.c Nyx.c
+NYXSRC = server.c Nyx.c onlineTable.c database.c
 XENSRC = client.c Xenia.c
 GENSRC = networking.c protocol.c
 NYXOBJ = $(patsubst %.c, $(NYXPATH)/%.o, $(NYXSRC))

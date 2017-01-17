@@ -54,6 +54,7 @@
 #define CMD_CHANGE_STATE_LOGOUT		0x50
 
 /* definitions of states has to be continuous, becaues they will become index */
+/* This is not a good implementation, fix it afterwards */
 #define STATE_LOGIN_MIN	0x01
 #define STATE_LOGIN_0	0x01
 #define STATE_LOGIN_1	0x02

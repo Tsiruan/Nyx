@@ -37,8 +37,8 @@ void cmd_admin() {
 static void Nyx_readfds_init(fd_set *readfds) {
 	FD_ZERO(readfds);
 	FD_SET(0, readfds);
-	Nyx_fdset_addlistenfd(readfds);
-	Nyx_onlineTable_fill_fdset(readfds);
+	Nyx_fdset_push_listenfd(readfds);
+	Nyx_fdset_push_onlineusers(readfds);
 }
 
 int main(void) {
