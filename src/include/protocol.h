@@ -13,8 +13,9 @@
 
 //#define SESSION_LOGIN		0x00
 //#define SESSION_CONSOLE		0x01
-
-#define CMD_END_OF_CMDLIST	0xff
+									// bad explaination! fix when head is clear
+#define CMD_NULL			0x00	// used when no need to reply, and actions with no signal trigger
+#define CMD_END_OF_CMDLIST	0xff	// is put in the transTable
 
 #define CMD_MASK_SESSION		0xf0
 #define CMD_MASK_LOGIN			0x00
@@ -85,6 +86,7 @@
 #define EXTRACT_STATE(msg) 	protocol_msg_extract_state(msg)
 #define EXTRACT_CMD(msg) 	protocol_msg_extract_cmd(msg)
 #define EXTRACT_CONTENT(msg) protocol_msg_extract_content(msg)
+/* Refine: extract header */
 
 typedef char 			packet_elem_t;
 typedef packet_elem_t* 	packet_t;
@@ -103,9 +105,7 @@ const char *protocol_decode_state(state_t state_num);
 const char *protocol_decode_cmd(cmd_t cmd_num);
 
 void 	protocol_msg_send(int fd, state_t signal_state, cmd_t signal_cmd, msg_t message);
+void 	protocol_msg_scanf(state_t state, cmd_t cmd, packet_t buffer);
 state_t protocol_msg_extract_state(packet_t packet);
 cmd_t 	protocol_msg_extract_cmd(packet_t packet);
 msg_t 	protocol_msg_extract_content(packet_t packet);
-
-//void protocol_msg_get_sigstate();
-//void protocol_msg_get_sigcmd();

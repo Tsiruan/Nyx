@@ -1,0 +1,1 @@
+void Xenia_automata_init();

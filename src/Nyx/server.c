@@ -1,29 +1,7 @@
 #include "Nyx.h"
 
-static void task_from_client(int eventfd) {
-	packet_elem_t buffer[BUFFER_SIZE];
-	int readbyte;
-	readbyte = read(eventfd, buffer, sizeof(buffer));
 
-	if (readbyte < 0)	{perror("read() error"); exit(1);}
-	else if (readbyte == 0) {
-		printf("client disconnected!\n");
-		Nyx_client_close(eventfd);
-	} else {
-		printf("msg_recv: [ %s / %s ]\n", DECODE_STATE(buffer[0]), DECODE_CMD(buffer[1]));	// debug
-
-		cmd_t sent_cmd;
-
-		Nyx_state_sync_check(eventfd, protocol_msg_extract_state(buffer));
-		Nyx_state_forward(eventfd, protocol_msg_extract_cmd(buffer));
-		sent_cmd = Nyx_state_exec(eventfd, protocol_msg_extract_cmd(buffer), protocol_msg_extract_content(buffer));
-		Nyx_state_forward(eventfd, sent_cmd);
-		//printf("%s\n", buffer);
-	}
-}
-
-/* This is dirty, merge this into automata */
-void cmd_admin() {
+void Nyx_event_process_admin() {
 	char buffer_stdin[BUFFER_SIZE];
 	scanf("%s", buffer_stdin);
 
@@ -32,6 +10,37 @@ void cmd_admin() {
 		Nyx_close();
 		exit(0);
 	}
+}
+
+void Nyx_event_process_client(int clientfd) {
+	packet_elem_t buffer[BUFFER_SIZE];
+	int readbyte;
+	readbyte = read(clientfd, buffer, sizeof(buffer));
+
+	if (readbyte < 0)	{perror("read() error"); exit(1);}
+	else if (readbyte == 0) {
+		printf("client disconnected!\n");
+		Nyx_client_close(clientfd);
+	} else {
+		printf("msg_recv: [ %s / %s ]\n", DECODE_STATE(buffer[0]), DECODE_CMD(buffer[1]));	// debug
+
+		cmd_t sent_cmd;
+
+		Nyx_state_sync_check(clientfd, EXTRACT_STATE(buffer));
+		Nyx_state_forward(clientfd, EXTRACT_CMD(buffer));
+		sent_cmd = Nyx_state_exec(clientfd, EXTRACT_CMD(buffer), EXTRACT_CONTENT(buffer));
+		Nyx_state_forward(clientfd, sent_cmd);
+		//printf("%s\n", buffer);
+	}
+}
+
+
+void Nyx_event_process(int eventfd) {
+	if (eventfd == 0) {
+		Nyx_event_process_admin();
+	} else if (eventfd > 0) {
+		Nyx_event_process_client(eventfd);
+	}	
 }
 
 static void Nyx_readfds_init(fd_set *readfds) {
@@ -52,10 +61,8 @@ int main(void) {
 		int eventfd = Nyx_select(&readfds);
 		if (eventfd == NYX_SELECT_LISTEN) {
 			Nyx_accept();
-		} else if (eventfd == 0) {
-			cmd_admin();
 		} else {
-			task_from_client(eventfd);
+			Nyx_event_process(eventfd);
 		}
 	}
 

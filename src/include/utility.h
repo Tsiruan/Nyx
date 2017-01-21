@@ -1,0 +1,1 @@
+int ut_strmatch(const char *str, int count, ...);

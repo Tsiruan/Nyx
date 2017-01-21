@@ -8,15 +8,8 @@ static void protocol_state_TransTable_fill_array(char transTableIndex, int count
 
 static transition_t TransTable[ STATELIST_MAX_STATES ][ STATELIST_LENGTH ];
 
+
 /*
- *  The packet sends between client and server has a header:
- *  ------------------------------------------------------------------------
- *  |        state         |          cmd         |       messages.....
- *  ------------------------------------------------------------------------
- *  |<--- 8 bits, char --->|<--- 8 bits, char --->|
- *
- *
- *
  *  The complete information of DFA is stored in the Transition Table, by this format:
  *   
  *   | current |     command     |  next   |
@@ -38,7 +31,7 @@ void protocol_state_TransTable_init() {
 	protocol_state_TransTable_fill_array(STATE_LOGIN_5, 2, 	PACK(CMD_LOGIN_MATCH,			STATE_LOGIN_2), PACK(CMD_LOGIN_NOMATCH, 	STATE_LOGIN_3));
 	protocol_state_TransTable_fill_array(STATE_LOGIN_6, 1, 	PACK(CMD_LOGIN_LOGINSUCCESS,	STATE_CONSOLE));
 	protocol_state_TransTable_fill_array(STATE_LOGIN_7, 2, 	PACK(CMD_LOGIN_ENTERPASS,		STATE_LOGIN_4),	PACK(CMD_LOGIN_TYPOID, 		STATE_LOGIN_5));
-	protocol_state_TransTable_fill_array(STATE_CONSOLE, 12,	PACK(CMD_CHANGE_STATE_LOGOUT,	STATE_LOGIN_0),
+	protocol_state_TransTable_fill_array(STATE_CONSOLE, 13,	PACK(CMD_CHANGE_STATE_LOGOUT,	STATE_LOGIN_0),
 															PACK(CMD_USER_LIST_ALL,			STATE_CONSOLE),
 															PACK(CMD_USER_LIST_ONLINE,		STATE_CONSOLE),
 															PACK(CMD_USER_RETURN_LIST,		STATE_CONSOLE),
@@ -49,7 +42,8 @@ void protocol_state_TransTable_init() {
 															PACK(CMD_CHAT_RETURN_DIALOG,	STATE_CONSOLE),
 															PACK(CMD_CHAT_SENDMSG,			STATE_CONSOLE),
 															PACK(CMD_CHAT_UPDATE_DIALOG,	STATE_CONSOLE),
-															PACK(CMD_FTRANS_REQUEST,		STATE_CONSOLE));
+															PACK(CMD_FTRANS_REQUEST,		STATE_CONSOLE),
+															PACK(CMD_NULL,					STATE_CONSOLE));
 }
 
 static int protocol_state_trans_pack(state_t nextstate, cmd_t trans_signal_cmd) {
@@ -77,7 +71,6 @@ state_t protocol_state_TransTable_lookup(const state_t currentState, const cmd_t
 
 	for (i = 0; (cmd_t)TransTable[(int)currentState][i] != CMD_END_OF_CMDLIST && i < STATELIST_MAX_TRANSITION; i++) {
 		if ((cmd_t)TransTable[(int)currentState][i] == rcvcmd) {
-			//printf("%s\n", DECODE_STATE(currentState));
 			return (state_t)(TransTable[(int)currentState][i] >> 8);
 		}
 	}
@@ -86,6 +79,10 @@ state_t protocol_state_TransTable_lookup(const state_t currentState, const cmd_t
 	printf("\non %s\nrcv %s\n", DECODE_STATE(currentState), DECODE_CMD(rcvcmd));
 	exit(1);
 }
+
+
+
+
 
 void protocol_state_forward(state_t *state, const cmd_t signal_cmd) {
 	printf("forwarding [%s > %s] ---> ", DECODE_STATE(*state), DECODE_CMD(signal_cmd));
@@ -105,27 +102,63 @@ int protocol_state_in_console_session(state_t state) {
 }
 
 
+
+
+
+
+/*
+ *  The packet sends between client and server has a header:
+ *  --------------------------------------------------------------------------
+ *  |      state     |       cmd      |   message size  |      messages.....
+ *  --------------------------------------------------------------------------
+ *  |<--- 8 bits --->|<--- 8 bits --->|<--- 32 bits --->|
+ *         char             char              int
+ *
+ *  How to add a new cmd:
+ *  1. add a new #define in protocol.h, about line 28
+ *  2. add it to the automata description in protocol.c,
+ *     function protocol_state_TransTable_init()
+ *  3. add it to the function protocol_decode_cmd(char cmd_num), in protocol.c
+ *
+ */
+
+#define HEADER_OFFSET_STATE	0
+#define HEADER_OFFSET_CMD 	1
+#define HEADER_OFFSET_SIZE	2
+#define HEADER_OFFSET_MSG	6
+
+
 void protocol_msg_send(int fd, state_t signal_state, cmd_t signal_cmd, msg_t message) {
 	packet_elem_t buffer[BUFFER_SIZE] = {signal_state, signal_cmd};		
 	if (message != NULL) {
-		memmove((buffer + 2), message, sizeof(buffer)-2);
+		memmove((buffer + HEADER_OFFSET_MSG), message, sizeof(buffer)-HEADER_OFFSET_MSG);
 	}
 	
 	write(fd, buffer, sizeof(buffer));
-	printf("msg_send: [ %s / %s ]\n", DECODE_STATE(buffer[0]), DECODE_CMD(buffer[1]));	// debug
+	printf("msg_send: [ %s / %s ]\n", DECODE_STATE(buffer[HEADER_OFFSET_STATE]), DECODE_CMD(buffer[HEADER_OFFSET_CMD]));	// debug
+}
+
+void protocol_msg_scanf(state_t state, cmd_t cmd, packet_t buffer) {
+	*(buffer + HEADER_OFFSET_STATE) = state;
+	*(buffer + HEADER_OFFSET_CMD) = cmd;
+	scanf("%s", buffer + HEADER_OFFSET_MSG);
 }
 
 state_t protocol_msg_extract_state(packet_t packet) {
-	return packet[0];
+	return packet[HEADER_OFFSET_STATE];
 }
 
 cmd_t protocol_msg_extract_cmd(packet_t packet) {
-	return packet[1];
+	return packet[HEADER_OFFSET_CMD];
 }
 
 msg_t protocol_msg_extract_content(packet_t packet) {
-	return packet + 2;
+	return packet + HEADER_OFFSET_MSG;
 }
+
+
+
+
 
 const char *protocol_decode_state(char state_num) {
 	switch(state_num) {
@@ -153,6 +186,9 @@ const char *protocol_decode_state(char state_num) {
 }
 
 const char *protocol_decode_cmd(char cmd_num) {
+	if (cmd_num == CMD_NULL)
+		return "CMD_NULL";
+
 	switch (cmd_num & CMD_MASK_SESSION) {
 		case CMD_MASK_LOGIN:
 		switch (cmd_num) {
